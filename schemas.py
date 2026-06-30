@@ -66,3 +66,28 @@ class MeetLinkRequest(BaseModel):
     meet_link: str = Field(..., min_length=5, description="Google Meet or video call link to send to online registrants")
     selected_slot: Optional[str] = Field(None, description="Optional specific slot to filter recipients")
 
+class CourseCreate(BaseModel):
+    banner: Optional[str] = Field(None, description="Base64 encoded image or URL")
+    heading: str = Field(..., min_length=1, max_length=255)
+    sub_heading: str = Field(..., min_length=1, max_length=255)
+    description: str = Field(...)
+    duration: str = Field(..., min_length=1, max_length=100)
+    timings: str = Field(..., description="JSON string representation of timings/slots")
+
+class CourseOut(BaseModel):
+    id: int
+    banner: Optional[str]
+    heading: str
+    sub_heading: str
+    description: str
+    duration: str
+    timings: str
+    is_active: bool
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            datetime.datetime: lambda v: v.isoformat()
+        }
+

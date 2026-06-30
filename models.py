@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean
 from database import Base
 
 class ContactSubmission(Base):
@@ -35,3 +35,19 @@ class CourseRegistration(Base):
 
     def __repr__(self):
         return f"<CourseRegistration id={self.id} name={self.name} slot={self.selected_slot}>"
+
+class Course(Base):
+    __tablename__ = "courses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    banner = Column(Text, nullable=True) # Base64 encoded image or URL
+    heading = Column(String(255), nullable=False)
+    sub_heading = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    duration = Column(String(100), nullable=False)
+    timings = Column(Text, nullable=False) # JSON list storing timing/slot details
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<Course id={self.id} heading={self.heading} is_active={self.is_active}>"

@@ -3,6 +3,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
+import json
 
 import models
 import schemas
@@ -120,6 +121,26 @@ def register_course(payload: schemas.CourseRegistrationCreate, background_tasks:
         db.commit()
         db.refresh(new_registration)
 
+        # Try to find the course details for the email template
+        course_heading = "Enhancing Your LinkedIn Profile"
+        course_sub_heading = "Build Your Brand. Unlock Opportunities."
+        course_duration = "1 Hour"
+
+        # Fallback check: try to find a course that has this slot in its timings JSON
+        active_courses = db.query(models.Course).all()
+        for c in active_courses:
+            try:
+                slots_data = json.loads(c.timings)
+                for s in slots_data:
+                    slot_str = s.get("slot") if isinstance(s, dict) else str(s)
+                    if slot_str == payload.selected_slot:
+                        course_heading = c.heading
+                        course_sub_heading = c.sub_heading
+                        course_duration = c.duration
+                        break
+            except Exception:
+                pass
+
         # Queue sending the email in the background
         background_tasks.add_task(
             send_registration_email,
@@ -127,7 +148,10 @@ def register_course(payload: schemas.CourseRegistrationCreate, background_tasks:
             recipient_name=payload.name,
             selected_slot=payload.selected_slot,
             company_name=payload.company_name,
-            designation=payload.designation
+            designation=payload.designation,
+            course_heading=course_heading,
+            course_sub_heading=course_sub_heading,
+            course_duration=course_duration
         )
 
         return new_registration
@@ -150,15 +174,26 @@ def get_course_registrations(db: Session = Depends(get_db)):
             detail=f"Database error retrieving course registrations: {str(e)}"
         )
 
-# Active course registration slots config
+import json
+
+# Active course registration slots config (Fallback default slots)
 ACTIVE_COURSE_SLOTS = [
     "1st July | 3:00 PM | Gowra Deccan.",
     "4th July | 11:00 AM | Online Session"
 ]
 
 @app.get("/api/course-slots", response_model=List[str])
-def get_course_slots():
+def get_course_slots(db: Session = Depends(get_db)):
     """Get the active list of Date & Time slots for the personal branding session."""
+    active_course = db.query(models.Course).filter(models.Course.is_active == True).order_by(models.Course.created_at.desc()).first()
+    if active_course:
+        try:
+            slots_data = json.loads(active_course.timings)
+            if isinstance(slots_data, list):
+                return [s.get("slot") if isinstance(s, dict) else str(s) for s in slots_data]
+        except Exception as e:
+            print(f"[DB] Error parsing course timings: {e}")
+            
     return ACTIVE_COURSE_SLOTS
 
 # ─── Admin Authentication ───────────────────────────────────────────────────
@@ -241,3 +276,105 @@ def send_meet_link(payload: schemas.MeetLinkRequest, background_tasks: Backgroun
         "count": len(online_registrants),
         "recipients": [r.email for r in online_registrants]
     }
+
+# ─── Course Management ──────────────────────────────────────────────────────
+
+@app.get("/api/active-course")
+def get_active_course(db: Session = Depends(get_db)):
+    """Retrieve the details of the currently active course (latest)."""
+    active_course = db.query(models.Course).filter(models.Course.is_active == True).order_by(models.Course.created_at.desc()).first()
+    if not active_course:
+        return None
+    
+    try:
+        timings_list = json.loads(active_course.timings)
+    except Exception:
+        timings_list = []
+        
+    return {
+        "id": active_course.id,
+        "banner": active_course.banner,
+        "heading": active_course.heading,
+        "sub_heading": active_course.sub_heading,
+        "description": active_course.description,
+        "duration": active_course.duration,
+        "timings": timings_list
+    }
+
+@app.get("/api/active-courses")
+def get_active_courses(db: Session = Depends(get_db)):
+    """Retrieve details of all currently active courses."""
+    active_list = db.query(models.Course).filter(models.Course.is_active == True).order_by(models.Course.created_at.desc()).all()
+    results = []
+    for c in active_list:
+        try:
+            timings_list = json.loads(c.timings)
+        except Exception:
+            timings_list = []
+        results.append({
+            "id": c.id,
+            "banner": c.banner,
+            "heading": c.heading,
+            "sub_heading": c.sub_heading,
+            "description": c.description,
+            "duration": c.duration,
+            "timings": timings_list
+        })
+    return results
+
+@app.get("/api/admin/courses", response_model=List[schemas.CourseOut])
+def get_admin_courses(db: Session = Depends(get_db)):
+    """Retrieve list of all courses for admin dashboard."""
+    return db.query(models.Course).order_by(models.Course.created_at.desc()).all()
+
+@app.post("/api/admin/courses", status_code=status.HTTP_201_CREATED)
+def create_course(payload: schemas.CourseCreate, db: Session = Depends(get_db)):
+    """Create a new course."""
+    # Create the new course (starts active but does not deactivate others)
+    new_course = models.Course(
+        banner=payload.banner,
+        heading=payload.heading,
+        sub_heading=payload.sub_heading,
+        description=payload.description,
+        duration=payload.duration,
+        timings=payload.timings,
+        is_active=True
+    )
+    db.add(new_course)
+    db.commit()
+    db.refresh(new_course)
+    return {"message": "Course created and activated successfully.", "course_id": new_course.id}
+
+@app.post("/api/admin/courses/{course_id}/toggle-active")
+def toggle_course_active(course_id: int, db: Session = Depends(get_db)):
+    """Toggle a specific course active/inactive status."""
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found.")
+    
+    course.is_active = not course.is_active
+    db.commit()
+    return {"message": f"Course active status set to {course.is_active}."}
+
+@app.post("/api/admin/courses/{course_id}/activate")
+def activate_course(course_id: int, db: Session = Depends(get_db)):
+    """Set a specific course to active."""
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found.")
+        
+    course.is_active = True
+    db.commit()
+    return {"message": f"Course '{course.heading}' is now active."}
+
+@app.delete("/api/admin/courses/{course_id}")
+def delete_course(course_id: int, db: Session = Depends(get_db)):
+    """Delete a course by ID."""
+    course = db.query(models.Course).filter(models.Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found.")
+    
+    db.delete(course)
+    db.commit()
+    return {"message": "Course deleted successfully."}
+

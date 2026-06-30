@@ -170,9 +170,7 @@ def send_confirmation_email(recipient_email: str, recipient_name: str, submissio
         print(f"[Email] Confirmation email sent successfully to {recipient_email}!")
     except Exception as e:
         print(f"[Email] Error occurred while sending email to {recipient_email}: {e}")
-
-
-def send_registration_email(recipient_email: str, recipient_name: str, selected_slot: str, company_name: str, designation: str):
+def send_registration_email(recipient_email: str, recipient_name: str, selected_slot: str, company_name: str, designation: str, course_heading: str = "Enhancing Your LinkedIn Profile", course_sub_heading: str = "Build Your Brand. Unlock Opportunities.", course_duration: str = "1 Hour"):
     """Sends a formatted HTML confirmation email to the user confirming their LinkedIn Personal Branding Session seat."""
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
@@ -185,7 +183,7 @@ def send_registration_email(recipient_email: str, recipient_name: str, selected_
         print(f"[Email] Registration details - Name: {recipient_name}, Email: {recipient_email}, Slot: {selected_slot}")
         return
 
-    subject = "Confirmation: Your Seat is Reserved (LinkedIn Personal Branding Session)"
+    subject = f"Confirmation: Your Seat is Reserved ({course_heading})"
     
     html_body = f"""
     <!DOCTYPE html>
@@ -278,12 +276,12 @@ def send_registration_email(recipient_email: str, recipient_name: str, selected_
             </div>
             <div class="email-body">
                 <h2>Hello {recipient_name},</h2>
-                <p>Your seat for our exclusive <strong>LinkedIn Personal Branding Session</strong> has been successfully reserved!</p>
+                <p>Your seat for our exclusive <strong>{course_heading}</strong> has been successfully reserved!</p>
                 
                 <div class="highlight-box">
-                    <p><strong>Topic:</strong> Enhancing Your LinkedIn Profile - Build Your Brand. Unlock Opportunities.</p>
+                    <p><strong>Topic:</strong> {course_heading} - {course_sub_heading}</p>
                     <p><strong>Selected Slot:</strong> {selected_slot}</p>
-                    <p><strong>Duration:</strong> 1 Hour</p>
+                    <p><strong>Duration:</strong> {course_duration}</p>
                     <p><strong>Your Details:</strong> {designation} at {company_name}</p>
                 </div>
                 
@@ -312,7 +310,7 @@ def send_registration_email(recipient_email: str, recipient_name: str, selected_
     msg["From"] = f"{smtp_from_name} <{smtp_username}>"
     msg["To"] = recipient_email
 
-    plain_text = f"Hello {recipient_name},\n\nYour seat for our LinkedIn Personal Branding Session has been reserved!\n\nSlot: {selected_slot}\nDuration: 1 Hour\n\nBest regards,\nThe Famelyn Team"
+    plain_text = f"Hello {recipient_name},\n\nYour seat for {course_heading} has been reserved!\n\nSlot: {selected_slot}\nDuration: {course_duration}\n\nBest regards,\nThe Famelyn Team"
     
     msg.attach(MIMEText(plain_text, "plain"))
     msg.attach(MIMEText(html_body, "html"))
@@ -326,6 +324,7 @@ def send_registration_email(recipient_email: str, recipient_name: str, selected_
         print(f"[Email] Course registration email sent successfully to {recipient_email}!")
     except Exception as e:
         print(f"[Email] Failed to send course registration email to {recipient_email}: {e}")
+
 
 
 def send_meet_link_email(recipient_email: str, recipient_name: str, meet_link: str, selected_slot: str):
